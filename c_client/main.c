@@ -115,9 +115,9 @@ int main() {
     }
 
     send(sock_fd, msg, strlen(msg), 0);
-    printf("Hello message sent\n");
+    printf("message sent\n");
 
-    char* netstring;
+    char* netstring; //malloc
     const int res = netstring_read_fd(sock_fd, &netstring);
     if (res != 0) {
         fprintf(stderr, "netsring read err: %d\n", res);
@@ -135,5 +135,6 @@ int main() {
     printf("\njson as a string: %s", json_str);
 
     close(sock_fd);
+    free(netstring);
     return 0;
 }
