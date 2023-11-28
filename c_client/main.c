@@ -94,7 +94,7 @@ int netstring_read_fd(int fd, char** netstring) {
 int main() {
     int status, valread, sock_fd;
     struct sockaddr_in serv_addr;
-    char* hello = "{\"id\":\"123\"}";
+    char* msg = "{\"id\":\"0123\"}";
     char buffer[1024] = {0};
     if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
@@ -114,7 +114,7 @@ int main() {
         return -1;
     }
 
-    send(sock_fd, hello, strlen(hello), 0);
+    send(sock_fd, msg, strlen(msg), 0);
     printf("Hello message sent\n");
 
     char* netstring;
