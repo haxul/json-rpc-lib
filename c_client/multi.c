@@ -32,7 +32,7 @@
 #define DATA_MAXSIZE 512
 
 #define SERVER_IPV4_ADDR "127.0.0.1"
-#define SERVER_LISTEN_PORT 8080
+#define SERVER_LISTEN_PORT 3030
 
 // message --------------------------------------------------------------------
 

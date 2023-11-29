@@ -29,9 +29,9 @@ public class SockWorker implements Runnable {
     private final WorkerCtx ctx;
     private final ObjectMapper mapper;
 
-    private record DoHandleReqDto(Result res, java.lang.String errMsg, JsonRpcCode code,
+    private record DoHandleReqDto(Result res, String errMsg, JsonRpcCode code,
                                   JsonRpcEntity<?> methodRespBody) {
-        public DoHandleReqDto(java.lang.String errMsg, JsonRpcCode code) {
+        public DoHandleReqDto(String errMsg, JsonRpcCode code) {
             this(FAIL, errMsg, code, null);
         }
 
@@ -121,11 +121,10 @@ public class SockWorker implements Runnable {
                     writeAsNetstring(out, mapper.writeValueAsBytes(failResp));
                 }
             } catch (SocketException e) {
-                log.error("socket '{}' is disconnected", socket);
                 close(socket);
                 return;
             } catch (Exception e) {
-                log.error("internal err: {}", socket, e);
+                log.error("internal err",  e);
             }
         }
     }
@@ -138,7 +137,7 @@ public class SockWorker implements Runnable {
                 return new DoHandleReqDto(validate.errMsg(), INVALID_REQ);
             }
 
-            final java.lang.String reqMethod = req.get("method").asText();
+            final String reqMethod = req.get("method").asText();
 
             final JsonRpcMethod<?> jsonRpcMethod = ctx.methodMap().get(reqMethod);
             if (jsonRpcMethod == null) {

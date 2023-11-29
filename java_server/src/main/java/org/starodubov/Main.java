@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class Main {
     //EXAMPLE
-    public static void main(java.lang.String[] args) {
+    public static void main(String[] args) {
         final var jsonRpcServer = new JsonRpcServer(
                 3030,
                 new ObjectMapper(),
@@ -24,7 +24,7 @@ public class Main {
         jsonRpcServer.startOnNewThread();
     }
 
-    record User(int age, java.lang.String name) {
+    record User(int age, String name) {
     }
 
     public static class SubtractJsonRpcMethod implements JsonRpcMethod<User> {
