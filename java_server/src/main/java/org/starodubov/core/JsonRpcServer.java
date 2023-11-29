@@ -18,6 +18,7 @@ public class JsonRpcServer {
     private final ObjectMapper mapper;
     private final List<JsonRpcMethod<?>> methods;
     private long connCounter = 0;
+    private Thread thread;
 
     public JsonRpcServer(final int port, final ObjectMapper mapper, final List<JsonRpcMethod<?>> methods) {
         assertThat(() -> port > 0, "port must be > 0");
@@ -27,7 +28,7 @@ public class JsonRpcServer {
     }
 
     public void startOnNewThread() {
-        Thread.ofPlatform()
+        thread = Thread.ofPlatform()
                 .name("json-rpc-server-thread")
                 .daemon(false)
                 .inheritInheritableThreadLocals(false)
