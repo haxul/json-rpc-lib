@@ -16,17 +16,17 @@ public enum JsonRpcCode {
     INVALID_REQ(-32600),
     PARSE_ERR(-32700);
 
-    private int code;
+    private int intVal;
 
-    public int getCode() {
-        return code;
+    public int intVal() {
+        return intVal;
     }
 
     public boolean isErr() {
         return this != SUCCESS;
     }
 
-    JsonRpcCode(int code) {
-        this.code = code;
+    JsonRpcCode(int intVal) {
+        this.intVal = intVal;
     }
 }

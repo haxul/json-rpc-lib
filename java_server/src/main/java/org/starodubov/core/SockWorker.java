@@ -1,8 +1,11 @@
 package org.starodubov.core;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.IntNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.starodubov.reqhandler.JsonRpcEntity;
 import org.starodubov.reqhandler.JsonRpcMethod;
 import org.starodubov.util.Result;
 import org.starodubov.util.JsonRpcCode;
@@ -11,6 +14,7 @@ import org.starodubov.validator.ValidateResult;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Map;
 
 import static org.starodubov.util.Constant.COMMA;
 import static org.starodubov.util.Constant.EOF;
@@ -18,6 +22,7 @@ import static org.starodubov.util.JsonRpcCode.*;
 import static org.starodubov.util.Result.FAIL;
 import static org.starodubov.util.Result.OK;
 import static org.starodubov.util.Support.close;
+import static org.starodubov.util.Support.jsonTokenerParse;
 
 public class SockWorker implements Runnable {
 
@@ -25,19 +30,20 @@ public class SockWorker implements Runnable {
     private final Socket socket;
     private final BufferedInputStream in;
     private final BufferedOutputStream out;
-    private final ExecCtx ctx;
+    private final WorkerCtx ctx;
 
-    private record DoHandleReqDto(Result res, String errMsg, JsonRpcCode code, JsonNode methodResponse) {
-        public DoHandleReqDto(String errMsg, JsonRpcCode code) {
+    private record DoHandleReqDto(Result res, java.lang.String errMsg, JsonRpcCode code,
+                                  JsonRpcEntity<?> methodRespBody) {
+        public DoHandleReqDto(java.lang.String errMsg, JsonRpcCode code) {
             this(FAIL, errMsg, code, null);
         }
 
-        public DoHandleReqDto(JsonNode methodResponse) {
+        public DoHandleReqDto(JsonRpcEntity<?> methodResponse) {
             this(OK, null, SUCCESS, methodResponse);
         }
     }
 
-    public SockWorker(final Socket socket, final ExecCtx ctx) {
+    public SockWorker(final Socket socket, final WorkerCtx ctx) {
         setKeepAlive(socket);
         this.socket = socket;
         this.in = getIn(socket);
@@ -76,7 +82,7 @@ public class SockWorker implements Runnable {
     public void run() {
         log.debug("new json-rpc socket: {}", socket);
         final byte[] buff = new byte[8 * 1024];
-        JsonNode json;
+        JsonNode req;
         for (; ; ) {
             try {
                 final int len = in.read(buff);
@@ -84,21 +90,31 @@ public class SockWorker implements Runnable {
                     close(socket);
                     return;
                 }
-                json = parse(buff, len);
-                if (json == null) {
-                    log.debug("parse err: '{}'", json);
+                req = jsonTokenerParse(ctx.jsonMapper(), buff, len);
+                if (req == null) {
+                    log.debug("parse err: '{}'", req);
                     continue;
                 }
 
-                log.debug("json-rpc request: '{}'", json);
+                log.debug("json-rpc request: '{}'", req);
 
-                final DoHandleReqDto handleReq = doHandleReq(json);
+                final DoHandleReqDto handleReq = doHandleReq(req);
 
-                if (handleReq.res() == OK && handleReq.methodResponse != null) {
-                    final byte[] respArr = ctx.jsonMapper().writeValueAsBytes(handleReq.methodResponse());
-                    out.write("%d:".formatted(respArr.length).getBytes());
-                    out.write(respArr);
-                    out.write(COMMA);
+                if (handleReq.res() == OK && handleReq.methodRespBody != null) {
+                    if (handleReq.methodRespBody().hasErr()) {
+                        final byte[] respBytes = ctx.jsonMapper()
+                                .writeValueAsBytes(buildFailResponse(req, handleReq.methodRespBody()));
+                        out.write("%d:".formatted(respBytes.length).getBytes());
+                        out.write(respBytes);
+                        out.write(COMMA);
+                    } else {
+                        final JsonRpcEntity<?> jsonRpcEntity = handleReq.methodRespBody();
+                        final byte[] respBytes = ctx.jsonMapper()
+                                .writeValueAsBytes(buildSuccessResponse(req, jsonRpcEntity.result()));
+                        out.write("%d:".formatted(respBytes.length).getBytes());
+                        out.write(respBytes);
+                        out.write(COMMA);
+                    }
                 } else {
                     doHandleErr(handleReq);
                 }
@@ -122,28 +138,52 @@ public class SockWorker implements Runnable {
         }
     }
 
-    private DoHandleReqDto doHandleReq(final JsonNode node) {
-        try {
+    private JsonNode buildFailResponse(JsonNode req, JsonRpcEntity<?> err) {
+        final JsonNode errRes = ctx.jsonMapper().createObjectNode()
+                .setAll(Map.of(
+                        "code", new IntNode(err.code().intVal()),
+                        "message", new TextNode(err.err())
+                ));
+        return ctx.jsonMapper()
+                .createObjectNode()
+                .setAll(Map.of(
+                        "jsonrpc", new TextNode("2.0"),
+                        "error", errRes,
+                        "id", req.get("id")
+                ));
+    }
 
-            final ValidateResult validate = ctx.validator().validate(node);
+    private JsonNode buildSuccessResponse(JsonNode req, Object bodyResp) {
+        final JsonNode bodyTree = ctx.jsonMapper().valueToTree(bodyResp);
+        return ctx.jsonMapper().createObjectNode()
+                .setAll(Map.of(
+                        "jsonrpc", new TextNode("2.0"),
+                        "result", bodyTree,
+                        "id", req.get("id")
+                ));
+    }
+
+    private DoHandleReqDto doHandleReq(final JsonNode req) {
+        try {
+            final ValidateResult validate = ctx.validator().validate(req);
             if (validate.res().isErr()) {
                 log.error("validation err: '{}'", validate.errMsg());
                 return new DoHandleReqDto(validate.errMsg(), INVALID_REQ);
             }
 
-            final String reqMethod = node.get("method").asText();
+            final java.lang.String reqMethod = req.get("method").asText();
 
-            final JsonRpcMethod jsonRpcMethod = ctx.methodMap().get(reqMethod);
+            final JsonRpcMethod<?> jsonRpcMethod = ctx.methodMap().get(reqMethod);
             if (jsonRpcMethod == null) {
                 log.error("method '{}' is not found", reqMethod);
                 return new DoHandleReqDto("method is not found", METHOD_NOT_FOUND);
             }
 
-            if (node.get("params") == null) {
-                return new DoHandleReqDto(jsonRpcMethod.doHandle());
+            if (req.get("params") == null) {
+                return new DoHandleReqDto(jsonRpcMethod.doMethod());
             }
 
-            return new DoHandleReqDto(jsonRpcMethod.doHandle(node));
+            return new DoHandleReqDto(jsonRpcMethod.doMethod(req));
         } catch (final Exception e) {
             log.error("internal err", e);
             return new DoHandleReqDto("unexpected err", INTERNAL_ERR);
@@ -160,26 +200,10 @@ public class SockWorker implements Runnable {
 //        out.println("err: " + res);
     }
 
-    private void doHandleErr(final String msg) {
+    private void doHandleErr(final java.lang.String msg) {
         //TODO
 //        out.println(msg);
     }
 
-    private JsonNode parse(final byte[] buff, final int len) {
-        try {
-            return ctx.jsonMapper().readTree(buff, 0, len);
-        } catch (Exception e) {
-            log.error("parse err", e);
-            return null;
-        }
-    }
 
-    private JsonNode parse(final String s) {
-        try {
-            return ctx.jsonMapper().readTree(s);
-        } catch (Exception e) {
-            log.error("json parse err: '{}'", s, e);
-            return null;
-        }
-    }
 }

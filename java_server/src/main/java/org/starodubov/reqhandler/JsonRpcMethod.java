@@ -2,11 +2,15 @@ package org.starodubov.reqhandler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-public interface JsonRpcMethod {
+public interface JsonRpcMethod<A> {
 
-    JsonNode doHandle(final JsonNode json);
+    default JsonRpcEntity<A> doMethod(final JsonNode json) {
+        throw new UnsupportedOperationException("not implemented");
+    }
 
-    JsonNode doHandle();
+    default JsonRpcEntity<A> doMethod() {
+        throw new UnsupportedOperationException("not implemented");
+    }
 
-    String getMethodName();
+    String methodName();
 }

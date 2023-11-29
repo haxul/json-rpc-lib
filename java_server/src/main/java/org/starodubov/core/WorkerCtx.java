@@ -6,8 +6,8 @@ import org.starodubov.validator.JsonRpcValidator;
 
 import java.util.Map;
 
-public record ExecCtx(
-        Map<String, JsonRpcMethod> methodMap,
+public record WorkerCtx(
+        Map<String, JsonRpcMethod<?>> methodMap,
         ObjectMapper jsonMapper,
         JsonRpcValidator validator
 ) {
