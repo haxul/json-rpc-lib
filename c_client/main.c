@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define PORT 8080
+#define PORT 3030
 /*
 void json_parse() {
     char* string = "{ \"colors\" : \"hello world\", \"continents\" : 7, \"oceans\" : 5 }";
@@ -94,8 +94,9 @@ int netstring_read_fd(int fd, char** netstring) {
 int main() {
     int status, valread, sock_fd;
     struct sockaddr_in serv_addr;
-    char* msg = "{\"id\":\"0123\"}";
+    char* msg = "{\"id\":\"1\",\"jsonrpc\":\"2.0\",\"params\":\"hello\",\"method\":\"subtract\"}";
     char buffer[1024] = {0};
+
     if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
         return -1;
