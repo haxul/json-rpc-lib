@@ -8,7 +8,10 @@ import org.starodubov.reqhandler.JsonRpcMethod;
 import org.starodubov.util.JsonRpcCode;
 
 import java.util.List;
+/*
+{"jsonrpc": "2.0", "method": "subtract", "params": {"one": 1, "two": "helloparam"}, "id": 1}
 
+ */
 public class Main {
     //EXAMPLE
     public static void main(java.lang.String[] args) {
