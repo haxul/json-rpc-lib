@@ -10,6 +10,7 @@ import org.starodubov.validator.JsonRpc2VerValidator;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.starodubov.util.Support.assertThat;
 
@@ -18,8 +19,7 @@ public class JsonRpcServer {
     private final int port;
     private final ObjectMapper mapper;
     private final List<JsonRpcMethod<?>> methods;
-    private long connCounter = 0;
-    private Thread thread;
+    private final AtomicLong connCounter = new AtomicLong(0);
     private final Set<Socket> activeSocket = Collections.newSetFromMap(new WeakHashMap<>());
 
     public JsonRpcServer(final int port, final ObjectMapper mapper, final List<JsonRpcMethod<?>> methods) {
@@ -30,7 +30,7 @@ public class JsonRpcServer {
     }
 
     public void startOnNewThread() {
-        thread = Thread.ofPlatform()
+        Thread.ofPlatform()
                 .name("json-rpc-server-thread")
                 .daemon(false)
                 .inheritInheritableThreadLocals(false)
@@ -58,11 +58,10 @@ public class JsonRpcServer {
                 sock = serverSock.accept();
                 activeSocket.add(sock);
                 Thread.ofVirtual()
-                        .name("json-rpc-sock-worker-thread-", connCounter++)
+                        .name("json-rpc-sock-worker-thread-", connCounter.getAndIncrement())
                         .inheritInheritableThreadLocals(false)
-                        .uncaughtExceptionHandler((thread, ex) -> {
-                            log.error("uncaught ex on thread: '{}'", thread, ex);
-                        })
+                        .uncaughtExceptionHandler((thread, ex) ->
+                                log.error("uncaught ex on thread: '{}'", thread, ex))
                         .start(new SockWorker(sock, ctx));
             }
         } catch (Exception e) {
