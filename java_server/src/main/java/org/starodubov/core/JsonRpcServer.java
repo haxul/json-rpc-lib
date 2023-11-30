@@ -4,11 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.starodubov.reqhandler.JsonRpcMethod;
+import org.starodubov.util.Support;
 import org.starodubov.validator.JsonRpc2VerValidator;
 
 import java.net.ServerSocket;
-import java.util.HashMap;
-import java.util.List;
+import java.net.Socket;
+import java.util.*;
 
 import static org.starodubov.util.Support.assertThat;
 
@@ -19,6 +20,7 @@ public class JsonRpcServer {
     private final List<JsonRpcMethod<?>> methods;
     private long connCounter = 0;
     private Thread thread;
+    private Set<Socket> activeSocket = Collections.newSetFromMap(new WeakHashMap<>());
 
     public JsonRpcServer(final int port, final ObjectMapper mapper, final List<JsonRpcMethod<?>> methods) {
         assertThat(() -> port > 0, "port must be > 0");
@@ -36,6 +38,10 @@ public class JsonRpcServer {
     }
 
     public void start() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            activeSocket.forEach(Support::close);
+            log.info("close all active socket gracefully");
+        }));
         final var mMap = new HashMap<String, JsonRpcMethod<?>>();
         for (var m : methods) {
             if (mMap.containsKey(m.methodName())) {
@@ -47,14 +53,17 @@ public class JsonRpcServer {
         final var ctx = new WorkerCtx(mMap, mapper, new JsonRpc2VerValidator());
         try (final var serverSock = new ServerSocket(port)) {
             log.info("json-rpc server started on port: {}", port);
+            Socket sock;
             for (; ; ) {
+                sock = serverSock.accept();
+                activeSocket.add(sock);
                 Thread.ofVirtual()
                         .name("json-rpc-sock-worker-thread-", connCounter++)
                         .inheritInheritableThreadLocals(false)
                         .uncaughtExceptionHandler((thread, ex) -> {
                             log.error("uncaught ex on thread: '{}'", thread, ex);
                         })
-                        .start(new SockWorker(serverSock.accept(), ctx));
+                        .start(new SockWorker(sock, ctx));
             }
         } catch (Exception e) {
             log.error("unexpected err", e);

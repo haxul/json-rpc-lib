@@ -28,12 +28,11 @@ public class Support {
 
     public static void close(final Socket socket) {
         if (socket == null) return;
-
         try {
             socket.close();
             log.info("socket is closed: '{}'", socket);
         } catch (Exception e) {
-            log.error("close token err", e);
+            log.error("close socket err", e);
         }
     }
 
