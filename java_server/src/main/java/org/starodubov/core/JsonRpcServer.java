@@ -20,7 +20,7 @@ public class JsonRpcServer {
     private final List<JsonRpcMethod<?>> methods;
     private long connCounter = 0;
     private Thread thread;
-    private Set<Socket> activeSocket = Collections.newSetFromMap(new WeakHashMap<>());
+    private final Set<Socket> activeSocket = Collections.newSetFromMap(new WeakHashMap<>());
 
     public JsonRpcServer(final int port, final ObjectMapper mapper, final List<JsonRpcMethod<?>> methods) {
         assertThat(() -> port > 0, "port must be > 0");
