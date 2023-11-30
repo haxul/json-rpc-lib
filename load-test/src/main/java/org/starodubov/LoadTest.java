@@ -46,11 +46,16 @@ public class LoadTest {
             sock.connect(new InetSocketAddress(3030));
             final var in = new BufferedInputStream(sock.getInputStream());
             final var out = new BufferedOutputStream(sock.getOutputStream());
-            final var json = """
-                    {"jsonrpc": "2.0", "method": "subtract", "params": [42, 23], "id": 1}""".trim();
-            final var bytes = json.getBytes();
+
             final var buff = new byte[512];
             while (flag.getOpaque()) {
+                final var json = """
+                        {"jsonrpc": "2.0", "method": "subtract", "params": {"goal": %d, "str": "%s"}, "id": %d}""".formatted(
+                        ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE),
+                        genStr(),
+                        ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE)
+                ).trim();
+                final var bytes = json.getBytes();
                 out.write(bytes);
                 out.flush();
                 in.read(buff);
@@ -59,6 +64,17 @@ public class LoadTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static String genStr() {
+        int leftLimit = 97; // letter 'a'
+        int rightLimit = 122; // letter 'z'
+        int targetStringLength = 10;
+
+        return ThreadLocalRandom.current().ints(leftLimit, rightLimit + 1)
+                .limit(targetStringLength)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+                .toString();
     }
 
     public static void sleepSmooth(final long t) {
