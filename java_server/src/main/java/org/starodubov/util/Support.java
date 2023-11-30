@@ -22,8 +22,8 @@ public class Support {
 
     private static final Logger log = LoggerFactory.getLogger(Support.class);
 
-    public static void assertThat(final Supplier<Boolean> fn, final String msg) {
-        if (!fn.get()) throw new IllegalStateException(msg);
+    public static void assertThat(final boolean exp, final String msg) {
+        if (!exp) throw new IllegalStateException(msg);
     }
 
     public static void close(final Socket socket) {
@@ -37,8 +37,8 @@ public class Support {
     }
 
     public static JsonNode jsonTokenerParse(final ObjectMapper mapper, final byte[] buff, final int len) {
-        assertThat(() -> mapper != null, "mapper is  null");
-        assertThat(() -> buff != null, "buff is  null");
+        assertThat(mapper != null, "mapper is  null");
+        assertThat(buff != null, "buff is  null");
 
         try {
             return mapper.readTree(buff, 0, len);

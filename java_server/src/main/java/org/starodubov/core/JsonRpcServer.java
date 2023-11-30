@@ -10,7 +10,6 @@ import org.starodubov.validator.JsonRpc2VerValidator;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.starodubov.util.Support.assertThat;
 
@@ -19,11 +18,11 @@ public class JsonRpcServer {
     private final int port;
     private final ObjectMapper mapper;
     private final List<JsonRpcMethod<?>> methods;
-    private final AtomicLong connCounter = new AtomicLong(0);
+    private long connCounter = 0;
     private final Set<Socket> activeSocket = Collections.newSetFromMap(new WeakHashMap<>());
 
     public JsonRpcServer(final int port, final ObjectMapper mapper, final List<JsonRpcMethod<?>> methods) {
-        assertThat(() -> port > 0, "port must be > 0");
+        assertThat(port > 0, "port must be > 0");
         this.port = port;
         this.mapper = mapper;
         this.methods = methods;
@@ -45,7 +44,7 @@ public class JsonRpcServer {
         final var mMap = new HashMap<String, JsonRpcMethod<?>>();
         for (var m : methods) {
             if (mMap.containsKey(m.methodName())) {
-                assertThat(() -> !mMap.containsKey(m.methodName()),
+                assertThat(!mMap.containsKey(m.methodName()),
                         "duplicate method handlers for: '%s'".formatted(m.methodName()));
             }
             mMap.put(m.methodName(), m);
@@ -58,7 +57,7 @@ public class JsonRpcServer {
                 sock = serverSock.accept();
                 activeSocket.add(sock);
                 Thread.ofVirtual()
-                        .name("json-rpc-sock-worker-thread-", connCounter.getAndIncrement())
+                        .name("json-rpc-sock-worker-thread-", connCounter++)
                         .inheritInheritableThreadLocals(false)
                         .uncaughtExceptionHandler((thread, ex) ->
                                 log.error("uncaught ex on thread: '{}'", thread, ex))
