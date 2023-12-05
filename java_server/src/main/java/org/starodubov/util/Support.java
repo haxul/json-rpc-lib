@@ -50,11 +50,11 @@ public class Support {
         }
     }
 
-    public static JsonNode buildFailResponse(final ObjectMapper mapper, final JsonNode req, final JsonRpcEntity<?> err) {
+    public static JsonNode buildFailResponse(final ObjectMapper mapper, final JsonNode req, final JsonRpcEntity<?> entity) {
         final JsonNode errRes = mapper.createObjectNode()
                 .setAll(Map.of(
-                        "code", new IntNode(err.code().intVal()),
-                        "message", new TextNode(err.err())
+                        "code", new IntNode(entity.code().intVal()),
+                        "message", new TextNode(entity.err())
                 ));
         return mapper
                 .createObjectNode()
