@@ -99,9 +99,9 @@ public class SockWorker implements Runnable {
                     case BoxedOk(JsonRpcEntity<?> entity) -> {
                         //SUCCESS:  метод с таким названием существует, формат соответствует json-rpc 2.0
                         final byte[] respBytes = entity.hasErr() ?
-                                // Пользователь вернул успешный ответ
-                                ctx.jsonMapper().writeValueAsBytes(buildFailResponse(mapper, req, entity))
                                 // Пользователь вернул ошибку
+                                ctx.jsonMapper().writeValueAsBytes(buildFailResponse(mapper, req, entity))
+                                // Пользователь вернул успешный ответ
                                 : ctx.jsonMapper().writeValueAsBytes(buildSuccessResponse(mapper, req, entity.result()));
                         log.debug("response: {}", new String(respBytes));
                         writeAsNetstring(out, respBytes);
