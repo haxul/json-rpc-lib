@@ -24,6 +24,7 @@ import static org.starodubov.util.Support.*;
 public class SockWorker implements Runnable {
 
     private final static Logger log = LoggerFactory.getLogger(SockWorker.class);
+    private final static int ERR_LIMIT = 3;
     private final Socket socket;
     private final BufferedInputStream in;
     private final BufferedOutputStream out;
@@ -119,10 +120,7 @@ public class SockWorker implements Runnable {
                 return;
             } catch (Exception e) {
                 log.error("internal err", e);
-                if (errCount++ > 3) {
-                    log.error("too much unexpected errors. close socket: {}", socket);
-                    close(socket);
-                }
+                if (errCount++ > ERR_LIMIT) close(socket);
             }
         }
     }
@@ -131,6 +129,7 @@ public class SockWorker implements Runnable {
         try {
             writeAsNetstring(out,
                     mapper.writeValueAsBytes(buildFailResponse(mapper, null, JsonRpcEntity.fail(code))));
+            if (errCount++ > ERR_LIMIT) close(socket);
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
