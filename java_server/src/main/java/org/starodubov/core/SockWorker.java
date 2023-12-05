@@ -98,17 +98,11 @@ public class SockWorker implements Runnable {
                 switch (handleResult) {
                     case BoxedOk(JsonRpcEntity<?> entity) -> {
                         //SUCCESS:  метод с таким названием существует, формат соответствует json-rpc 2.0
-                        final byte[] respBytes;
-                        if (entity.hasErr()) {
-                            // Пользователь вернул успешный ответ
-                            respBytes = ctx.jsonMapper()
-                                    .writeValueAsBytes(buildFailResponse(mapper, req, entity));
-                        } else {
-                            // Пользователь вернул ошибку
-                            respBytes = ctx.jsonMapper()
-                                    .writeValueAsBytes(buildSuccessResponse(mapper, req, entity.result()));
-                        }
-
+                        final byte[] respBytes = entity.hasErr() ?
+                                // Пользователь вернул успешный ответ
+                                ctx.jsonMapper().writeValueAsBytes(buildFailResponse(mapper, req, entity))
+                                // Пользователь вернул ошибку
+                                : ctx.jsonMapper().writeValueAsBytes(buildSuccessResponse(mapper, req, entity.result()));
                         log.debug("response: {}", new String(respBytes));
                         writeAsNetstring(out, respBytes);
                     }
