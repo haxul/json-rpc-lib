@@ -1,23 +1,24 @@
 package org.starodubov.core;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.starodubov.reqhandler.JsonRpcEntity;
 import org.starodubov.reqhandler.JsonRpcMethod;
-import org.starodubov.util.Result;
 import org.starodubov.util.JsonRpcCode;
+import org.starodubov.util.result.*;
 import org.starodubov.validator.ValidateResult;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 
 import static org.starodubov.util.Constant.EOF;
 import static org.starodubov.util.JsonRpcCode.*;
-import static org.starodubov.util.Result.FAIL;
-import static org.starodubov.util.Result.OK;
 import static org.starodubov.util.Support.*;
 
 public class SockWorker implements Runnable {
@@ -28,17 +29,7 @@ public class SockWorker implements Runnable {
     private final BufferedOutputStream out;
     private final WorkerCtx ctx;
     private final ObjectMapper mapper;
-
-    private record DoHandleReqDto(Result res, String errMsg, JsonRpcCode code,
-                                  JsonRpcEntity<?> methodRespBody) {
-        public DoHandleReqDto(String errMsg, JsonRpcCode code) {
-            this(FAIL, errMsg, code, null);
-        }
-
-        public DoHandleReqDto(JsonRpcEntity<?> methodResponse) {
-            this(OK, null, SUCCESS, methodResponse);
-        }
-    }
+    private int errCount = 0;
 
     public SockWorker(final Socket socket, final WorkerCtx ctx) {
         setKeepAlive(socket);
@@ -88,53 +79,87 @@ public class SockWorker implements Runnable {
                     close(socket);
                     return;
                 }
-                req = jsonTokenerParse(ctx.jsonMapper(), buff, len);
+                final int commaIdx = netstringCommaIdx(buff);
+                if (commaIdx == -1) {
+                    writeFailResponse(PARSE_ERR);
+                    continue;
+                }
+
+                final int netstringLen = Integer.parseInt(new String(buff, 0, commaIdx));
+                req = jsonTokenerParse(ctx.jsonMapper(), buff, commaIdx + 1, netstringLen);
                 if (req == null) {
-                    log.debug("parse err: '{}'", req);
-                    final var entity = new JsonRpcEntity<>(PARSE_ERR, "Parse error");
-                    writeAsNetstring(out, mapper.writeValueAsBytes(buildFailResponse(mapper, null, entity)));
+                    writeFailResponse(PARSE_ERR);
                     continue;
                 }
 
                 log.debug("json-rpc request: '{}'", req);
 
-                final DoHandleReqDto handleReq = doHandleReq(req);
+                final Result handleResult = doHandleReq(req);
+                switch (handleResult) {
+                    case BoxedOk(JsonRpcEntity<?> entity) -> {
+                        //SUCCESS:  метод с таким названием существует, формат соответствует json-rpc 2.0
+                        final byte[] respBytes;
+                        if (entity.hasErr()) {
+                            // Пользователь вернул успешный ответ
+                            respBytes = ctx.jsonMapper()
+                                    .writeValueAsBytes(buildFailResponse(mapper, req, entity));
+                        } else {
+                            // Пользователь вернул ошибку
+                            respBytes = ctx.jsonMapper()
+                                    .writeValueAsBytes(buildSuccessResponse(mapper, req, entity.result()));
+                        }
 
-                if (handleReq.res() == OK && handleReq.methodRespBody != null) {
-                    //SUCCESS:  метод с таким названием существует, формат соответствует json-rpc 2.0
-                    if (handleReq.methodRespBody().hasErr()) {
-                        // Пользователь вернул успешный ответ
-                        final byte[] respBytes = ctx.jsonMapper()
-                                .writeValueAsBytes(buildFailResponse(mapper, req, handleReq.methodRespBody()));
-                        writeAsNetstring(out, respBytes);
-                    } else {
-                        // Пользователь вернул ошибку
-                        final JsonRpcEntity<?> jsonRpcEntity = handleReq.methodRespBody();
-                        final byte[] respBytes = ctx.jsonMapper()
-                                .writeValueAsBytes(buildSuccessResponse(mapper, req, jsonRpcEntity.result()));
+                        log.debug("response: {}", new String(respBytes));
                         writeAsNetstring(out, respBytes);
                     }
-                } else {
-                    // ERROR: что то не так с форматом или методом
-                    final JsonNode failResp =
-                            buildFailResponse(mapper, req, new JsonRpcEntity<>(handleReq.code(), handleReq.errMsg()));
-                    writeAsNetstring(out, mapper.writeValueAsBytes(failResp));
+                    case BoxedErr(JsonRpcCode code) when code != SUCCESS -> {
+                        final JsonNode failResp =
+                                buildFailResponse(mapper, req, JsonRpcEntity.fail(code));
+                        log.debug("fail response: {}", failResp);
+                        writeAsNetstring(out, mapper.writeValueAsBytes(failResp));
+                    }
+                    default -> throw new IllegalStateException("Unexpected value: " + handleResult);
                 }
             } catch (SocketException e) {
                 close(socket);
                 return;
             } catch (Exception e) {
-                log.error("internal err",  e);
+                log.error("internal err", e);
+                if (errCount++ > 3) {
+                    log.error("too much unexpected errors. close socket: {}", socket);
+                    close(socket);
+                }
             }
         }
     }
 
-    private DoHandleReqDto doHandleReq(final JsonNode req) {
+    private void writeFailResponse(final JsonRpcCode code) {
+        try {
+            writeAsNetstring(out,
+                    mapper.writeValueAsBytes(buildFailResponse(mapper, null, JsonRpcEntity.fail(code))));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private int netstringCommaIdx(final byte[] buff) {
+        for (int i = 0; i < 9; i++) {
+            if (buff[i] == /*char ':'*/58) {
+                return i;
+            }
+            if (!Character.isDigit(buff[i])) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private Result doHandleReq(final JsonNode req) {
         try {
             final ValidateResult validate = ctx.validator().validate(req);
             if (validate.res().isErr()) {
                 log.error("validation err: '{}'", validate.errMsg());
-                return new DoHandleReqDto(validate.errMsg(), INVALID_REQ);
+                return Err.box(INVALID_REQ);
             }
 
             final String reqMethod = req.get("method").asText();
@@ -142,17 +167,17 @@ public class SockWorker implements Runnable {
             final JsonRpcMethod<?> jsonRpcMethod = ctx.methodMap().get(reqMethod);
             if (jsonRpcMethod == null) {
                 log.error("method '{}' is not found", reqMethod);
-                return new DoHandleReqDto("method is not found", METHOD_NOT_FOUND);
+                return Err.box(METHOD_NOT_FOUND);
             }
 
             if (req.get("params") == null) {
-                return new DoHandleReqDto(jsonRpcMethod.doMethod());
+                return Ok.box(jsonRpcMethod.doMethod());
             }
 
-            return new DoHandleReqDto(jsonRpcMethod.doMethod(req.get("params")));
+            return Ok.box(jsonRpcMethod.doMethod(req.get("params")));
         } catch (final Exception e) {
             log.error("internal err", e);
-            return new DoHandleReqDto("unexpected err", INTERNAL_ERR);
+            return Err.box(INTERNAL_ERR);
         }
     }
 }

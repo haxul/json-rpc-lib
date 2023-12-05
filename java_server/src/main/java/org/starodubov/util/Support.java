@@ -8,15 +8,15 @@ import com.fasterxml.jackson.databind.node.TextNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.starodubov.reqhandler.JsonRpcEntity;
+import org.starodubov.util.result.Err;
+import org.starodubov.util.result.Ok;
+import org.starodubov.util.result.Result;
 
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.Map;
-import java.util.function.Supplier;
 
 import static org.starodubov.util.Constant.COMMA;
-import static org.starodubov.util.Result.FAIL;
-import static org.starodubov.util.Result.OK;
 
 public class Support {
 
@@ -36,12 +36,14 @@ public class Support {
         }
     }
 
-    public static JsonNode jsonTokenerParse(final ObjectMapper mapper, final byte[] buff, final int len) {
+    public static JsonNode jsonTokenerParse(final ObjectMapper mapper, final byte[] buff, final int offset, final int len) {
         assertThat(mapper != null, "mapper is  null");
         assertThat(buff != null, "buff is  null");
+        if (offset < 0) return null;
+        if (len <= 0) return null;
 
         try {
-            return mapper.readTree(buff, 0, len);
+            return mapper.readTree(buff, offset, len);
         } catch (Exception e) {
             log.error("parse err: '{}'", e.getMessage());
             return null;
@@ -79,10 +81,10 @@ public class Support {
             out.write(bytes);
             out.write(COMMA);
             out.flush();
-            return OK;
+            return Ok.asResult();
         } catch (Exception e) {
             log.error("output write err", e);
-            return FAIL;
+            return Err.asResult();
         }
     }
 }

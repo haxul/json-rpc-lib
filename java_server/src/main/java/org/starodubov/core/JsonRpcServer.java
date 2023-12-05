@@ -28,6 +28,10 @@ public class JsonRpcServer {
         this.methods = methods;
     }
 
+    public static JsonRpcServerBuilder builder(int port) {
+        return new JsonRpcServerBuilder(port);
+    }
+
     public void startOnNewThread() {
         Thread.ofPlatform()
                 .name("json-rpc-server-thread")
@@ -65,6 +69,38 @@ public class JsonRpcServer {
             }
         } catch (Exception e) {
             log.error("unexpected err", e);
+        }
+    }
+
+    public static class JsonRpcServerBuilder {
+        private int port;
+        private ObjectMapper mapper;
+        private List<JsonRpcMethod<?>> methods;
+
+        private JsonRpcServerBuilder(int port) {
+            this.port = port;
+        }
+
+        public JsonRpcServerBuilder port(final int port) {
+            this.port = port;
+            return this;
+        }
+
+        public JsonRpcServerBuilder mapper(final ObjectMapper mapper) {
+            this.mapper = mapper;
+            return this;
+        }
+
+        public JsonRpcServerBuilder methods(final List<JsonRpcMethod<?>> methods) {
+            this.methods = methods;
+            return this;
+        }
+
+        public JsonRpcServer build() {
+            if (mapper == null) mapper = new ObjectMapper();
+            if (methods == null) methods = Collections.emptyList();
+
+            return new JsonRpcServer(port, mapper, methods);
         }
     }
 }
